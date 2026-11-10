@@ -96,16 +96,16 @@ Distribution: copy the folder into FreeCAD's `Macro/` directory, or install it w
 ### Phase 0: Project setup (½ day)
 - [ ] Repo layout as above; `package.xml` for Addon Manager.
 - [ ] Target **FreeCAD 1.0.x** (Python 3.11, PySide2/6 through FreeCAD's `PySide` shim).
-- [ ] Tests use the standard-library **`unittest`**, so there is no pytest dependency.
-- [ ] GitHub Actions: (1) core tests with plain Python, (2) CAD smoke tests with **`freecadcmd`** (headless FreeCAD, installed only in CI).
+- [x] Tests use the standard-library **`unittest`**, so there is no pytest dependency.
+- [ ] GitHub Actions: (1) core tests with plain Python ✅, (2) CAD smoke tests with **`freecadcmd`** (headless FreeCAD, installed only in CI).
 
-### Phase 1: Calculation core, `inductor_core.py` (3 days)
-- [ ] `Shape` enum: `SOLENOID`, `MULTILAYER`, `FLAT_SPIRAL`, `TOROID`.
-- [ ] Input dataclasses per shape, all in mm / µH (SI internally for µ₀).
-- [ ] Forward `L(N, dims)` and inverse `N(L_target, dims)` for each shape (§2.1).
-- [ ] Pitch modes: fixed length / fixed pitch / close-wound.
-- [ ] Rounding + recomputed L + error %, wire length, DCR, warnings.
-- [ ] Table of common metric enamelled-wire sizes (Ø 0.10 … 2.00 mm) with insulated Ø, for close-wound pitch.
+### Phase 1: Calculation core, `inductor_core.py` (3 days) ✅ done
+- [x] `Shape` enum: `SOLENOID`, `MULTILAYER`, `FLAT_SPIRAL`, `TOROID`.
+- [x] Input dataclasses per shape, all in mm / µH (SI internally for µ₀).
+- [x] Forward `L(N, dims)` and inverse `N(L_target, dims)` for each shape (§2.1).
+- [x] Pitch modes: fixed length / fixed pitch / close-wound.
+- [x] Rounding + recomputed L + error %, wire length, DCR, warnings.
+- [x] Table of nominal metric wire sizes (Ø 0.10 … 2.00 mm, IEC R20). Insulated Ø is entered by the user or roughly estimated (measure with calipers for accuracy).
 - **Tests:** reference value 25.4 / 50.8 mm, N = 20 → 13.79 µH; forward/inverse round trips for every shape; errors for impossible inputs (wire wider than pitch, target too large for the form).
 - **Done when:** all shapes round-trip to better than 1e-9 relative error.
 
