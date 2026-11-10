@@ -9,8 +9,40 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from enum import Enum
+
 import inductor_core as ic
 from inductor_core import PitchMode, Shape
+
+
+class DiameterRef(Enum):
+    """Where an entered solenoid diameter is measured."""
+
+    INSIDE = "inside"  # form surface the wire lies on
+    CENTRE = "centre"  # wire centre (mean diameter, what Wheeler uses)
+    OUTSIDE = "outside"  # outside of the winding
+
+
+DIAMETER_REF_LABELS = {
+    DiameterRef.INSIDE: "Inside (form / under wire)",
+    DiameterRef.CENTRE: "Wire centre (mean diameter)",
+    DiameterRef.OUTSIDE: "Outside of winding",
+}
+
+#: Shapes whose diameter field gets the "measured at" drop-down.
+DIAMETER_REF_SHAPES = (Shape.SOLENOID,)
+
+
+def form_diameter_mm(diameter_mm: float, ref: DiameterRef, wire_d_mm: float) -> float:
+    """Convert a diameter measured at ``ref`` to the form (inside) diameter."""
+    offset = {DiameterRef.INSIDE: 0.0, DiameterRef.CENTRE: 1.0, DiameterRef.OUTSIDE: 2.0}[ref]
+    form = diameter_mm - offset * wire_d_mm
+    if form <= 0:
+        raise ic.DesignError(
+            f"a {DIAMETER_REF_LABELS[ref].lower()} diameter of {diameter_mm:g} mm leaves "
+            f"no room for a form with {wire_d_mm:g} mm wire"
+        )
+    return form
 
 
 @dataclass(frozen=True)
@@ -31,11 +63,10 @@ class Field:
 #: Shape-specific dimension fields, in display order.
 SHAPE_FIELDS: dict[Shape, list[Field]] = {
     Shape.SOLENOID: [
-        Field("form_diameter_mm", "Form diameter (under wire)", 20.0, 0.5, 1000.0,
-              tooltip="Diameter of the surface the wire lies on: the outside of the "
-                      "tube or rod you wind on, or the bottom of the groove on a "
-                      "grooved form. The wire centre sits at half this diameter "
-                      "plus half the wire diameter."),
+        Field("diameter_mm", "Coil diameter", 20.0, 0.5, 1000.0,
+              tooltip="Coil diameter, measured where the 'Diameter measured at' "
+                      "drop-down says: inside (the form the wire lies on), wire "
+                      "centre (mean diameter) or outside of the winding."),
         Field("pitch_mm", "Pitch", 1.0, 0.01, 100.0, step=0.05, decimals=3,
               tooltip="Axial distance between turn centres.",
               modes=(PitchMode.FIXED_PITCH,)),
@@ -96,8 +127,13 @@ def build_spec(
     values: dict[str, float],
     wire: ic.Wire,
     mode: PitchMode | None = None,
+    diameter_ref: DiameterRef = DiameterRef.INSIDE,
 ) -> ic.Spec:
-    """Turn dialog values into a design spec. Unused keys are ignored."""
+    """Turn dialog values into a design spec. Unused keys are ignored.
+
+    ``diameter_ref`` says where the solenoid's ``diameter_mm`` was measured;
+    it is converted to the form (inside) diameter the core works with.
+    """
     modes = SHAPE_MODES[shape]
     if mode is None:
         mode = modes[0] if modes else None
@@ -112,7 +148,7 @@ def build_spec(
 
     if shape is Shape.SOLENOID:
         return ic.SolenoidSpec(
-            form_diameter_mm=v("form_diameter_mm"),
+            form_diameter_mm=form_diameter_mm(v("diameter_mm"), diameter_ref, wire.d),
             wire=wire,
             mode=mode,  # type: ignore[arg-type]
             pitch_mm=v("pitch_mm") if mode is PitchMode.FIXED_PITCH else None,
@@ -169,6 +205,8 @@ def format_turns(turns: float) -> str:
 
 
 _DETAIL_ROWS = [
+    ("form_diameter_mm", "Form diameter (under wire)", format_length),
+    ("mean_diameter_mm", "Mean diameter (wire centre)", format_length),
     ("mean_radius_mm", "Mean radius", format_length),
     ("outer_diameter_mm", "Outer diameter (with wire)", format_length),
     ("winding_depth_mm", "Winding depth", format_length),

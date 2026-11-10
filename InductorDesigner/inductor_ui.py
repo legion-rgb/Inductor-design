@@ -188,6 +188,7 @@ class DesignerWidget(QtWidgets.QWidget):
         self._unit = fi.DEFAULT_UNIT
         self._spins: dict[Shape, dict[str, QtWidgets.QDoubleSpinBox]] = {}
         self._mode_combos: dict[Shape, QtWidgets.QComboBox] = {}
+        self._dref_combos: dict[Shape, QtWidgets.QComboBox] = {}
         self._page_forms: dict[Shape, QtWidgets.QFormLayout] = {}
 
         root = QtWidgets.QVBoxLayout(self)
@@ -306,6 +307,16 @@ class DesignerWidget(QtWidgets.QWidget):
             combo.currentIndexChanged.connect(self._on_mode_changed)
             form.addRow("Winding", combo)
             self._mode_combos[shape] = combo
+        if shape in fi.DIAMETER_REF_SHAPES:
+            dref = QtWidgets.QComboBox()
+            for ref, label in fi.DIAMETER_REF_LABELS.items():
+                dref.addItem(label, ref.value)
+            dref.setToolTip("Where the coil diameter below is measured. The form "
+                            "diameter used for the calculation and the 3-D form is "
+                            "worked out from it.")
+            dref.currentIndexChanged.connect(self.recalculate)
+            form.addRow("Diameter measured at", dref)
+            self._dref_combos[shape] = dref
         spins = {}
         for f in fi.SHAPE_FIELDS[shape]:
             spin = self._spin(f.default, f.minimum, f.maximum, f.step, f.decimals)
@@ -320,6 +331,14 @@ class DesignerWidget(QtWidgets.QWidget):
     @property
     def current_shape(self) -> Shape:
         return Shape(self.shape_combo.currentData())
+
+    def current_diameter_ref(self) -> "fi.DiameterRef":
+        combo = self._dref_combos.get(self.current_shape)
+        return fi.DiameterRef(combo.currentData()) if combo else fi.DiameterRef.INSIDE
+
+    def set_diameter_ref(self, ref: "fi.DiameterRef") -> None:
+        combo = self._dref_combos[self.current_shape]
+        combo.setCurrentIndex(combo.findData(ref.value))
 
     def current_mode(self) -> Optional[PitchMode]:
         combo = self._mode_combos.get(self.current_shape)
@@ -379,7 +398,8 @@ class DesignerWidget(QtWidgets.QWidget):
         values = {k: s.value() for k, s in self._spins[shape].items()}
         try:
             wire = fi.make_wire(self._copper_d(), self.overall_spin.value())
-            spec = fi.build_spec(shape, values, wire, self.current_mode())
+            spec = fi.build_spec(shape, values, wire, self.current_mode(),
+                                 self.current_diameter_ref())
             target = ic.to_uH(self.target_spin.value(), self._unit)
             result = ic.design(spec, target, turns_step=self.step_combo.currentData(),
                                lead_length_mm=self.leads_spin.value())

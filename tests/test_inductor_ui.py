@@ -61,6 +61,17 @@ class TestDesignerWidget(unittest.TestCase):
         self.assertIn("smaller than the wire", self.w.error_label.text())
         self.assertFalse(self.w.build_button.isEnabled())
 
+    def test_diameter_ref_drop_down(self):
+        self.w.set_shape(Shape.SOLENOID)
+        self.w.overall_spin.setValue(0.86)
+        self.w.set_value("diameter_mm", 20)
+        inside = self.w.result.turns_exact
+        self.w.set_diameter_ref(ui.fi.DiameterRef.OUTSIDE)
+        self.assertAlmostEqual(self.w.spec.form_diameter_mm, 20 - 2 * 0.86)
+        self.assertGreater(self.w.result.turns_exact, inside)  # smaller coil, more turns
+        self.w.set_shape(Shape.TOROID)
+        self.assertIs(self.w.current_diameter_ref(), ui.fi.DiameterRef.INSIDE)
+
     def test_bad_copper_text(self):
         self.w.copper_combo.setCurrentText("abc")
         self.assertIsNone(self.w.result)

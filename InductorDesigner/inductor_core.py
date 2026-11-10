@@ -397,7 +397,8 @@ def _design_solenoid(spec: SolenoidSpec, target: float, step: float) -> DesignRe
         dcr_ohm=0.0,
         warnings=warnings,
         details={
-            "mean_radius_mm": r,
+            "form_diameter_mm": spec.form_diameter_mm,
+            "mean_diameter_mm": 2 * r,
             "outer_diameter_mm": spec.form_diameter_mm + 2 * d,
         },
     )

@@ -73,6 +73,38 @@ class TestBuildSpec(unittest.TestCase):
         self.assertEqual(fi.make_wire(1.0, 1.1).d, 1.1)
 
 
+class TestDiameterRef(unittest.TestCase):
+    wire = ic.Wire(1.0, 1.1)
+
+    def test_conversion_to_form_diameter(self):
+        self.assertEqual(fi.form_diameter_mm(20, fi.DiameterRef.INSIDE, 1.1), 20)
+        self.assertAlmostEqual(fi.form_diameter_mm(20, fi.DiameterRef.CENTRE, 1.1), 18.9)
+        self.assertAlmostEqual(fi.form_diameter_mm(20, fi.DiameterRef.OUTSIDE, 1.1), 17.8)
+
+    def test_all_refs_give_same_design_for_same_coil(self):
+        values = defaults(Shape.SOLENOID)
+        results = []
+        for ref, dia in [(fi.DiameterRef.INSIDE, 20), (fi.DiameterRef.CENTRE, 21.1),
+                         (fi.DiameterRef.OUTSIDE, 22.2)]:
+            values["diameter_mm"] = dia
+            spec = fi.build_spec(Shape.SOLENOID, values, self.wire, diameter_ref=ref)
+            self.assertAlmostEqual(spec.form_diameter_mm, 20)
+            results.append(ic.design(spec, 10).turns_exact)
+        self.assertAlmostEqual(results[0], results[1])
+        self.assertAlmostEqual(results[0], results[2])
+
+    def test_diameter_too_small_for_wire(self):
+        with self.assertRaises(ic.DesignError):
+            fi.form_diameter_mm(2.0, fi.DiameterRef.OUTSIDE, 1.1)
+
+    def test_result_rows_show_all_three_diameters(self):
+        spec = fi.build_spec(Shape.SOLENOID, defaults(Shape.SOLENOID), self.wire)
+        rows = dict(fi.result_rows(ic.design(spec, 10)))
+        self.assertEqual(rows["Form diameter (under wire)"], "20 mm")
+        self.assertEqual(rows["Mean diameter (wire centre)"], "21.1 mm")
+        self.assertEqual(rows["Outer diameter (with wire)"], "22.2 mm")
+
+
 class TestFormatting(unittest.TestCase):
     def test_inductance(self):
         self.assertEqual(fi.format_inductance(10.033, "µH"), "10.03 µH")
