@@ -119,7 +119,7 @@ Distribution: copy the folder into FreeCAD's `Macro/` directory, or install it w
 - Field tables and result formatting live in Qt-free `inductor_inputs.py` (unit-tested); the dialog has offscreen PySide6 smoke tests (CI only).
 
 ### Phase 3: Coil-form modelling, `inductor_cad.py` (4–5 days)
-- [ ] **Solenoid form:** tube (bore + wall) → helical groove: `Part.makeHelix(pitch, length, r)` + circular profile (Ø d + clearance) → `makePipeShell(..., isFrenet=True)` → cut from tube. End flanges and Ø d+0.2 mm wire-exit holes.
+- [ ] **Solenoid form:** "Form diameter" in the dialog is the diameter the wire lies on, so on the grooved form it is the **groove bottom** diameter; the lands between grooves are made larger so the wire is held. Tube (bore + wall) → helical groove: `Part.makeHelix(pitch, length, r)` + circular profile (Ø d + clearance) → `makePipeShell(..., isFrenet=True)` → cut from tube. End flanges and Ø d+0.2 mm wire-exit holes.
 - [ ] **Multi-layer form:** bobbin (core tube + two flanges), with winding width ℓ and depth b. No groove.
 - [ ] **Flat spiral form:** disc with an Archimedean spiral groove (B-spline through points r = rᵢ + p·θ/2π), profile swept and cut.
 - [ ] **Toroid form:** rectangular-section ring with N guide notches on the outer edge.

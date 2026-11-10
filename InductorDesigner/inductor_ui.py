@@ -132,19 +132,35 @@ class ShapeSketch(QtWidgets.QWidget):
         p.drawText(QtCore.QPointF(185, 140), "top view")
 
     def _draw_toroid(self, p: QtGui.QPainter) -> None:
+        # Top view: ring with turns wrapped around it (each turn crosses the
+        # top face radially, passes down through the hole and back up outside).
+        cx, cy, ri, ro = 90.0, 70.0, 26.0, 54.0
+        p.drawEllipse(QtCore.QPointF(cx, cy), ro, ro)
+        p.drawEllipse(QtCore.QPointF(cx, cy), ri, ri)
         p.save()
-        p.setPen(QtGui.QPen(p.pen().color(), 1, QtCore.Qt.DashLine))
-        p.drawLine(QtCore.QPointF(130, 15), QtCore.QPointF(130, 120))  # axis
+        p.setPen(QtGui.QPen(COPPER, 2.5, QtCore.Qt.SolidLine, QtCore.Qt.RoundCap))
+        turns = 20
+        for i in range(turns):
+            a = 2 * math.pi * (i + 0.5) / turns
+            c, s = math.cos(a), math.sin(a)
+            p.drawLine(QtCore.QPointF(cx + (ri - 2) * c, cy + (ri - 2) * s),
+                       QtCore.QPointF(cx + (ro + 2) * c, cy + (ro + 2) * s))
         p.restore()
-        for x0 in (60.0, 165.0):  # ring cross-section, both sides of the axis
-            p.drawRect(QtCore.QRectF(x0, 35, 35, 60))
-            for i in range(4):
-                self._wire(p, x0 - 4, 42 + 15 * i, 3.5)
-                self._wire(p, x0 + 39, 42 + 15 * i, 3.5)
-        self._dim(p, 95, 108, 165, 108, "ID", 5, 13)
-        self._dim(p, 60, 132, 200, 132, "OD", -6, 12)
-        self._dim(p, 222, 35, 222, 95, "h", 6, 4)
-        p.drawText(QtCore.QPointF(4, 20), "section through axis")
+        self._dim(p, cx - ri + 3, cy, cx + ri - 3, cy, "ID", -6, -5)
+        self._dim(p, cx - ro, 138, cx + ro, 138, "OD", ro + 6, 4)
+        p.drawText(QtCore.QPointF(4, 12), "top view")
+
+        # Side section of one side of the ring: the wire wraps all the way round it.
+        x0, y0, w, h = 196.0, 48.0, 26.0, 46.0
+        p.drawText(QtCore.QPointF(x0 - 14, 30), "section")
+        p.save()
+        p.setPen(QtGui.QPen(COPPER, 2.5))
+        p.setBrush(QtCore.Qt.NoBrush)
+        p.drawRoundedRect(QtCore.QRectF(x0 - 3, y0 - 3, w + 6, h + 6), 3, 3)
+        p.restore()
+        p.drawRect(QtCore.QRectF(x0, y0, w, h))
+        p.drawText(QtCore.QPointF(x0 - 6, y0 + h + 18), "in   out")
+        self._dim(p, x0 + w + 12, y0, x0 + w + 12, y0 + h, "h", 5, 4)
 
 
 # ---------------------------------------------------------------------------

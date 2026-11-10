@@ -31,8 +31,11 @@ class Field:
 #: Shape-specific dimension fields, in display order.
 SHAPE_FIELDS: dict[Shape, list[Field]] = {
     Shape.SOLENOID: [
-        Field("form_diameter_mm", "Form diameter", 20.0, 0.5, 1000.0,
-              tooltip="Outside diameter of the coil form (the wire sits on top of it)."),
+        Field("form_diameter_mm", "Form diameter (under wire)", 20.0, 0.5, 1000.0,
+              tooltip="Diameter of the surface the wire lies on: the outside of the "
+                      "tube or rod you wind on, or the bottom of the groove on a "
+                      "grooved form. The wire centre sits at half this diameter "
+                      "plus half the wire diameter."),
         Field("pitch_mm", "Pitch", 1.0, 0.01, 100.0, step=0.05, decimals=3,
               tooltip="Axial distance between turn centres.",
               modes=(PitchMode.FIXED_PITCH,)),
