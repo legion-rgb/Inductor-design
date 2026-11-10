@@ -109,13 +109,14 @@ Distribution: copy the folder into FreeCAD's `Macro/` directory, or install it w
 - **Tests:** reference value 25.4 / 50.8 mm, N = 20 → 13.79 µH; forward/inverse round trips for every shape; errors for impossible inputs (wire wider than pitch, target too large for the form).
 - **Done when:** all shapes round-trip to better than 1e-9 relative error.
 
-### Phase 2: Dialog UI, `inductor_ui.py` (2–3 days)
-- [ ] **Shape drop-down (`QComboBox`)** at the top. Changing it switches a `QStackedWidget` to that shape's input page, with an explanatory sketch image per shape.
-- [ ] Input fields as `QDoubleSpinBox` with **"mm" suffixes** and sensible ranges. Inductance field with an nH/µH/mH unit drop-down.
-- [ ] Pitch-mode radio buttons (fixed length / fixed pitch / close-wound) for solenoid and spiral.
-- [ ] **Calculate** → results panel: N (exact and rounded), pitch, coil length, wire length, DCR, predicted L at the rounded N, error %, warnings in amber.
-- [ ] **Build in FreeCAD** button (enabled after a calculation).
-- [ ] Opens as a docked Task Panel in FreeCAD, so the 3-D view stays visible.
+### Phase 2: Dialog UI, `inductor_ui.py` (2–3 days) ✅ done
+- [x] **Shape drop-down (`QComboBox`)** at the top. Changing it switches a `QStackedWidget` to that shape's input page, with a labelled dimension sketch per shape (drawn with `QPainter`, so there are no image files).
+- [x] Input fields as `QDoubleSpinBox` with **"mm" suffixes** and sensible ranges. Inductance field with an nH/µH/mH unit drop-down (switching units converts the value).
+- [x] Pitch-mode drop-down (close-wound / fixed pitch / fixed length) for solenoid and spiral; only the relevant fields are shown.
+- [x] **Live results** (recalculated on every change, instead of a Calculate button): N (exact and rounded), pitch, coil length, wire length, DCR, predicted L at the rounded N, error %, shape details, warnings in amber, input errors in red.
+- [x] **Build in FreeCAD** button (calls a build callback; stays disabled until Phase 3 provides one).
+- [x] Opens as a docked Task Panel in FreeCAD (`InductorDesigner.FCMacro`), or as a standalone window for development.
+- Field tables and result formatting live in Qt-free `inductor_inputs.py` (unit-tested); the dialog has offscreen PySide6 smoke tests (CI only).
 
 ### Phase 3: Coil-form modelling, `inductor_cad.py` (4–5 days)
 - [ ] **Solenoid form:** tube (bore + wall) → helical groove: `Part.makeHelix(pitch, length, r)` + circular profile (Ø d + clearance) → `makePipeShell(..., isFrenet=True)` → cut from tube. End flanges and Ø d+0.2 mm wire-exit holes.

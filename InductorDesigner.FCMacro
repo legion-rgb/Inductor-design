@@ -1,0 +1,47 @@
+# -*- coding: utf-8 -*-
+# Inductor Designer: pick a shape, enter dimensions (mm) and a target
+# inductance, get turns and pitch (Wheeler), then build the coil form.
+#
+# Install: copy this file and the InductorDesigner/ folder into your FreeCAD
+# macro directory (Macro > Macros... shows its path), then run this macro.
+
+__Name__ = "Inductor Designer"
+__Comment__ = "Design air-core inductors (Wheeler formulas) and model coil forms"
+__License__ = "MIT"
+__Version__ = "0.2.0"
+__Requires__ = "FreeCAD >= 1.0"
+
+import importlib
+import os
+import sys
+
+import FreeCAD
+
+
+def _package_dir():
+    candidates = []
+    try:
+        candidates.append(os.path.dirname(os.path.abspath(__file__)))
+    except NameError:  # some FreeCAD versions exec macros without __file__
+        pass
+    candidates += [FreeCAD.getUserMacroDir(True), FreeCAD.getUserMacroDir(False)]
+    for base in candidates:
+        path = os.path.join(base, "InductorDesigner")
+        if os.path.isfile(os.path.join(path, "inductor_core.py")):
+            return path
+    raise RuntimeError("InductorDesigner folder not found next to the macro")
+
+
+_path = _package_dir()
+if _path not in sys.path:
+    sys.path.insert(0, _path)
+
+import inductor_core  # noqa: E402
+import inductor_inputs  # noqa: E402
+import inductor_ui  # noqa: E402
+
+# Reload so edits to the modules take effect without restarting FreeCAD.
+for _mod in (inductor_core, inductor_inputs, inductor_ui):
+    importlib.reload(_mod)
+
+inductor_ui.show()
