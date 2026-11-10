@@ -118,16 +118,18 @@ Distribution: copy the folder into FreeCAD's `Macro/` directory, or install it w
 - [x] Opens as a docked Task Panel in FreeCAD (`InductorDesigner.FCMacro`), or as a standalone window for development.
 - Field tables and result formatting live in Qt-free `inductor_inputs.py` (unit-tested); the dialog has offscreen PySide6 smoke tests (CI only).
 
-### Phase 3: Coil-form modelling, `inductor_cad.py` (4–5 days)
-- [ ] **Solenoid form:** "Form diameter" in the dialog is the diameter the wire lies on, so on the grooved form it is the **groove bottom** diameter; the lands between grooves are made larger so the wire is held. Tube (bore + wall) → helical groove: `Part.makeHelix(pitch, length, r)` + circular profile (Ø d + clearance) → `makePipeShell(..., isFrenet=True)` → cut from tube. End flanges and Ø d+0.2 mm wire-exit holes.
-- [ ] **Multi-layer form:** bobbin (core tube + two flanges), with winding width ℓ and depth b. No groove.
-- [ ] **Flat spiral form:** disc with an Archimedean spiral groove (B-spline through points r = rᵢ + p·θ/2π), profile swept and cut.
-- [ ] **Toroid form:** rectangular-section ring with N guide notches on the outer edge.
-- [ ] Optional "wire" solid (copper colour) to show the winding.
-- [ ] Design parameters stored as **custom properties** on the object, and a summary written to the document, so a saved `.FCStd` carries its own design record.
-- [ ] Builder never exports anything. **The user exports with File → Export** (STEP/STL/...).
-- [ ] Shape validity checks after each build: `shape.isValid()`, volume > 0, bounding box matches the design. Show a friendly message if a sweep fails (usually pitch too tight).
-- **CI:** `freecadcmd` builds every shape from sample designs and runs the same checks.
+### Phase 3: Coil-form modelling, `inductor_cad.py` (4–5 days) ✅ done
+- [x] **Solenoid form:** "Form diameter" is the diameter the wire lies on, so on the grooved form it is the **groove bottom**; the ridges stand 60% of the wire diameter higher. Tube (bore + wall) with a helical groove (circle Ø d + clearance swept along `Part.makeHelix`, **one turn per sweep**, since cutting a stack of one-turn sweeps is ~5× faster than one long sweep), end flanges, and radial wire-exit holes into the bore. If the pitch leaves less than 0.4 mm between grooves (e.g. close-wound), the form is a plain cylinder and the user is told.
+- [x] **Multi-layer form:** bobbin (core tube + two flanges sized for the layer count), with a wire slot in one flange.
+- [x] **Flat spiral form:** disc with a spiral groove and exit holes. The spiral is built from **semicircles on two alternating centres** (half-tori grooves) instead of a B-spline sweep: B-spline sweeps made FreeCAD's booleans fail. Each turn still advances exactly one pitch.
+- [x] **Toroid form:** rectangular-section ring with one guide notch per turn on the outer edge (skipped with a note if they don't fit).
+- [x] Optional copper "WireModel" solid (solenoid, multi-layer, spiral), for viewing only.
+- [x] Design stored on the CoilForm as **custom properties** (turns, pitch, target/predicted L, wire, DCR, warnings) plus a full `DesignJSON` record, so a saved `.FCStd` carries its design.
+- [x] Builder never exports anything. **The user exports with File → Export** (STEP/STL/...).
+- [x] Validity checks after each build (`isValid`, has a solid, volume > 0); errors are shown in the panel.
+- [x] "3-D form options" in the dialog: groove clearance and depth, wall, end margin, flange thickness and height, spiral base, wire model on/off.
+- **Tests:** `tests/test_inductor_cad.py` checks every shape in FreeCAD 1.0: valid solids, dimensions from the optimal bounding box, and **no overlap between the wire model and the form** (the wire sits exactly in the groove). Also checked end-to-end in the FreeCAD 1.0 GUI (offscreen): macro → Task Panel → Build → objects and properties in the document.
+- **CI:** a job installs FreeCAD 1.0 from conda-forge and runs the CAD tests.
 
 ### Phase 4: Measurement and comparison, `inductor_log.py` (2 days)
 - [ ] **Log measurement** form: measured L (nH/µH/mH), test frequency (kHz), instrument, notes.

@@ -8,7 +8,7 @@
 __Name__ = "Inductor Designer"
 __Comment__ = "Design air-core inductors (Wheeler formulas) and model coil forms"
 __License__ = "MIT"
-__Version__ = "0.2.0"
+__Version__ = "0.3.0"
 __Requires__ = "FreeCAD >= 1.0"
 
 import importlib
@@ -36,12 +36,13 @@ _path = _package_dir()
 if _path not in sys.path:
     sys.path.insert(0, _path)
 
+import inductor_cad  # noqa: E402
 import inductor_core  # noqa: E402
 import inductor_inputs  # noqa: E402
 import inductor_ui  # noqa: E402
 
 # Reload so edits to the modules take effect without restarting FreeCAD.
-for _mod in (inductor_core, inductor_inputs, inductor_ui):
+for _mod in (inductor_core, inductor_inputs, inductor_cad, inductor_ui):
     importlib.reload(_mod)
 
-inductor_ui.show()
+inductor_ui.show(build_callback=inductor_cad.build_from_ui)

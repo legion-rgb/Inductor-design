@@ -26,7 +26,11 @@ class TestDesignerWidget(unittest.TestCase):
 
     def setUp(self):
         self.built = []
-        self.w = ui.DesignerWidget(build_callback=lambda s, r: self.built.append((s, r)))
+        def callback(spec, result, cad_values):
+            self.built.append((spec, result, cad_values))
+            return "Built OK"
+
+        self.w = ui.DesignerWidget(build_callback=callback)
 
     def test_drop_down_lists_all_shapes(self):
         items = [self.w.shape_combo.itemText(i) for i in range(self.w.shape_combo.count())]
@@ -89,6 +93,22 @@ class TestDesignerWidget(unittest.TestCase):
         self.w.build_button.click()
         self.assertEqual(len(self.built), 1)
         self.assertIs(self.built[0][1], self.w.result)
+        self.assertEqual(self.w.status_label.text(), "Built OK")
+        self.assertTrue(self.w.build_button.isEnabled())
+
+    def test_cad_values_match_cad_options(self):
+        import inductor_cad as cad
+        values = self.w.cad_values()
+        self.assertEqual(cad.CadOptions.from_dict(values), cad.CadOptions())
+        self.assertEqual(set(values) - {f.name for f in cad.fields(cad.CadOptions)}, set())
+
+    def test_build_failure_is_shown(self):
+        def fail(*_):
+            raise RuntimeError("boom")
+        w = ui.DesignerWidget(build_callback=fail)
+        w.build_button.click()
+        self.assertIn("Build failed: boom", w.status_label.text())
+        self.assertTrue(w.build_button.isEnabled())
 
     def test_build_disabled_without_callback(self):
         w = ui.DesignerWidget()

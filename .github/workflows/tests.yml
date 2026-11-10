@@ -30,3 +30,21 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: python -m unittest discover -s tests -v
+
+  cad:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-name: freecad
+          create-args: >-
+            -c conda-forge
+            freecad=1.0
+            python=3.11
+          cache-environment: true
+      - name: Coil-form tests in FreeCAD
+        run: FREECAD_LIB=$CONDA_PREFIX/lib python -m unittest tests.test_inductor_cad -v

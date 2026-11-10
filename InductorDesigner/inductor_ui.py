@@ -26,7 +26,8 @@ import inductor_core as ic
 import inductor_inputs as fi
 from inductor_core import PitchMode, Shape
 
-BuildCallback = Callable[[ic.Spec, ic.DesignResult], None]
+#: Build callback: (spec, result, cad option values) -> message for the user.
+BuildCallback = Callable[[ic.Spec, ic.DesignResult, dict], Optional[str]]
 
 COPPER = QtGui.QColor(184, 115, 51)
 WARN_COLOR = "#b26a00"
@@ -252,6 +253,20 @@ class DesignerWidget(QtWidgets.QWidget):
         root.addWidget(target_box)
 
         # Results ---------------------------------------------------------------
+        # 3-D form options ---------------------------------------------------
+        cad_box = QtWidgets.QGroupBox("3-D form options")
+        cad_form = QtWidgets.QFormLayout(cad_box)
+        self._cad_spins: dict[str, QtWidgets.QDoubleSpinBox] = {}
+        for f in fi.CAD_FIELDS:
+            spin = self._spin(f.default, f.minimum, f.maximum, f.step, f.decimals, f.suffix)
+            spin.setToolTip(f.tooltip)
+            cad_form.addRow(f.label, spin)
+            self._cad_spins[f.key] = spin
+        self.wire_model_check = QtWidgets.QCheckBox("Add wire model (for viewing)")
+        self.wire_model_check.setChecked(fi.CAD_WIRE_MODEL_DEFAULT)
+        cad_form.addRow(self.wire_model_check)
+        root.addWidget(cad_box)
+
         results_box = QtWidgets.QGroupBox("Results")
         results_layout = QtWidgets.QVBoxLayout(results_box)
         self.results_label = QtWidgets.QLabel()
@@ -267,6 +282,10 @@ class DesignerWidget(QtWidgets.QWidget):
 
         self.build_button = QtWidgets.QPushButton("Build in FreeCAD")
         root.addWidget(self.build_button)
+        self.status_label = QtWidgets.QLabel()
+        self.status_label.setWordWrap(True)
+        self.status_label.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
+        root.addWidget(self.status_label)
         root.addStretch(1)
 
         # Signals -------------------------------------------------------------
@@ -385,15 +404,37 @@ class DesignerWidget(QtWidgets.QWidget):
         self.target_spin.blockSignals(False)
         self.recalculate()
 
+    def cad_values(self) -> dict:
+        """3-D form options as a dict (keys of ``inductor_cad.CadOptions``)."""
+        values: dict = {k: s.value() for k, s in self._cad_spins.items()}
+        values["add_wire_model"] = self.wire_model_check.isChecked()
+        return values
+
     def _on_build(self) -> None:
-        if self.build_callback and self.spec and self.result:
-            try:
-                self.build_callback(self.spec, self.result)
-            except Exception as exc:  # show CAD errors in the panel, don't crash
-                self.error_label.setText(f"Build failed: {exc}")
+        if not (self.build_callback and self.spec and self.result):
+            return
+        self.build_button.setEnabled(False)
+        self.build_button.setText("Building\u2026")
+        self.status_label.setStyleSheet("")
+        self.status_label.setText("Building the coil form; grooved forms can take a while.")
+        QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
+        QtWidgets.QApplication.processEvents()
+        try:
+            message = self.build_callback(self.spec, self.result, self.cad_values())
+        except Exception as exc:  # show CAD errors in the panel, don't crash
+            self.status_label.setStyleSheet(f"color: {ERROR_COLOR};")
+            self.status_label.setText(f"Build failed: {exc}")
+        else:
+            self.status_label.setText(message or "Built.")
+        finally:
+            QtWidgets.QApplication.restoreOverrideCursor()
+            self.build_button.setText("Build in FreeCAD")
+            self._update_build_button()
 
     def recalculate(self, *_args) -> None:
         """Rebuild the spec from the inputs and refresh the results panel."""
+        if hasattr(self, "status_label"):
+            self.status_label.setText("")
         shape = self.current_shape
         values = {k: s.value() for k, s in self._spins[shape].items()}
         try:
@@ -426,7 +467,7 @@ class DesignerWidget(QtWidgets.QWidget):
     def _update_build_button(self) -> None:
         if self.build_callback is None:
             self.build_button.setEnabled(False)
-            self.build_button.setToolTip("3-D modelling arrives in Phase 3.")
+            self.build_button.setToolTip("Building the coil form needs FreeCAD.")
         else:
             self.build_button.setEnabled(self.result is not None)
             self.build_button.setToolTip("Create the coil form in the active FreeCAD document.")

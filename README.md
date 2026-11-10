@@ -12,7 +12,10 @@ prediction. FreeCAD is the only dependency. See [PLAN.md](PLAN.md).
 - **Phase 2, dialog UI: done.** `InductorDesigner/inductor_ui.py` gives a shape
   drop-down, per-shape inputs with a dimension sketch, and live results. It opens
   as a FreeCAD Task Panel.
-- Phase 3 (FreeCAD modelling): not started. *Build in FreeCAD* stays disabled until then.
+- **Phase 3, FreeCAD modelling: done.** `InductorDesigner/inductor_cad.py` builds the
+  coil form (grooved solenoid tube, bobbin, grooved spiral disc, notched toroid ring)
+  plus an optional copper wire model. Export it yourself with **File → Export**.
+- Phase 4 (measurement log): not started.
 
 ## Install in FreeCAD
 
@@ -42,6 +45,13 @@ Shapes: `SolenoidSpec` (close-wound / fixed pitch / fixed length),
 
 ```
 python3 -m unittest discover -s tests -v
+```
+
+The CAD tests in `tests/test_inductor_cad.py` need FreeCAD's Python. With a
+conda-forge FreeCAD install:
+
+```
+FREECAD_LIB=$CONDA_PREFIX/lib $CONDA_PREFIX/bin/python -m unittest tests.test_inductor_cad -v
 ```
 
 The dialog tests in `tests/test_inductor_ui.py` run offscreen when PySide6 is

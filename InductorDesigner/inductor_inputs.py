@@ -58,6 +58,7 @@ class Field:
     decimals: int = 2
     tooltip: str = ""
     modes: tuple[PitchMode, ...] | None = None  # shown only in these pitch modes
+    suffix: str = " mm"
 
 
 #: Shape-specific dimension fields, in display order.
@@ -120,6 +121,27 @@ DEFAULT_UNIT = "µH"
 DEFAULT_TARGET = 10.0
 
 DEFAULT_WIRE_COPPER_MM = 0.80
+
+#: 3-D form options; keys and defaults match ``inductor_cad.CadOptions``.
+CAD_FIELDS: list[Field] = [
+    Field("groove_clearance_mm", "Groove clearance", 0.2, 0.0, 2.0, step=0.05,
+          tooltip="Groove (and notch) width = wire diameter + this. Increase it if "
+                  "your printer makes grooves too tight."),
+    Field("groove_depth_pct", "Groove depth", 60.0, 30.0, 100.0, step=5, decimals=0,
+          suffix=" % of wire", tooltip="Height of the ridges between grooves."),
+    Field("wall_mm", "Wall under groove", 2.0, 0.0, 50.0,
+          tooltip="Tube wall thickness below the groove (solenoid) or core (bobbin). "
+                  "0 = solid rod."),
+    Field("end_margin_mm", "End margin", 3.0, 0.0, 50.0,
+          tooltip="Plain length before the first turn and after the last (solenoid)."),
+    Field("flange_mm", "Flange thickness", 2.0, 0.0, 20.0,
+          tooltip="End flanges (solenoid; bobbins always have at least 1.5 mm). 0 = none."),
+    Field("flange_extra_mm", "Flange / rim height", 2.0, 0.0, 50.0,
+          tooltip="How far flanges and the spiral disc rim stand above the wire."),
+    Field("base_mm", "Spiral base thickness", 2.0, 0.5, 20.0,
+          tooltip="Flat-spiral disc thickness under the groove."),
+]
+CAD_WIRE_MODEL_DEFAULT = True
 
 
 def build_spec(
