@@ -1,149 +1,155 @@
-# Inductor Designer: Development Action Plan
+# Inductor Designer: Development Action Plan (rev 2)
 
 ## 1. Goal
 
 A tool where the user:
 
-1. Picks an inductor geometry and enters its dimensions.
+1. **Picks the inductor shape from a drop-down** and enters its dimensions.
 2. Enters a target inductance.
 3. Gets the required **turns (N)** and **pitch (p)**, worked out with Wheeler-family formulas.
-4. Has the coil form (and, optionally, the wire path) built in **FreeCAD through an MCP server**, ready to export as STEP/STL for printing or machining.
-5. Winds the coil, measures it, and **enters the measured inductance**. The app then compares it with the prediction and keeps a history.
+4. Has the coil form **modelled in FreeCAD**. The user then **exports it from FreeCAD** (STEP/STL/...) through FreeCAD's own File → Export.
+5. Winds the coil, measures it, and **enters the measured inductance**. The app compares it with the prediction and keeps a history.
 
-Scope for v1 is **air-core** inductors only. Ferrite/powder cores come later (Phase 7).
+### Decisions so far
+
+| # | Decision |
+|---|---|
+| 1 | Shape is chosen from a **drop-down** |
+| 2 | **Export is done by the user in FreeCAD**, so the app has no export code |
+| 3 | **Keep dependencies to a minimum.** MCP is *not* required (see §3) |
+| 4 | **Metric units everywhere**: mm for lengths, nH/µH/mH for inductance, mm for wire diameter (no AWG) |
+
+v1 covers **air-core** inductors only.
 
 ---
 
-## 2. Supported geometries and formulas
+## 2. Supported shapes (drop-down entries) and formulas
 
-All Wheeler formulas below take dimensions in **inches** and return **µH**. Internally the app works in SI and converts at the boundary. `r` is always measured to the **wire centre**.
+The classic Wheeler formulas are written in inches. They are restated here **in millimetres → µH**. The conversion was checked numerically: r = 25.4 mm, ℓ = 50.8 mm, N = 20 → 13.79 µH, the same as the inch form. `r` is always measured to the **wire centre** (form radius + d/2).
 
-| Geometry | Inputs | Formula | Notes |
+| Drop-down entry | Inputs (mm) | Formula (mm → µH) | Notes |
 |---|---|---|---|
-| Single-layer solenoid | form diameter D, wire dia d, *either* length ℓ *or* pitch p | `L = r²N² / (9r + 10ℓ)` | ~1% accurate for ℓ > 0.8r |
-| Multi-layer solenoid | mean radius r, length ℓ, winding depth b | `L = 0.8 r²N² / (6r + 9ℓ + 10b)` | ~1% when the three denominator terms are similar in size |
-| Flat spiral (pancake) | inner radius rᵢ, wire d, pitch p | `L = r²N² / (8r + 11w)`, r = mean radius, w = winding width | w = N·p, so N must be solved numerically |
-| Toroid, rectangular cross-section | rᵢ, rₒ, height h | `L = µ₀N²h·ln(rₒ/rᵢ) / 2π` | Exact for an ideal winding (not Wheeler) |
-| Planar spiral, square/hex/octagon (PCB) | d_out, d_in, trace w/s | Modified Wheeler (Mohan 1999): `L = K₁µ₀N²d_avg / (1 + K₂ρ)` | K₁/K₂ table: square 2.34/2.75, hex 2.33/3.82, oct 2.25/3.55 |
+| Single-layer solenoid | form Ø, wire Ø d, *either* length ℓ *or* pitch p (or "close-wound") | `L = r²N² / (228.6·r + 254·ℓ)` | ~1% accurate for ℓ > 0.8r |
+| Multi-layer solenoid | mean radius r, length ℓ, winding depth b | `L = r²N² / (190.5·r + 285.75·ℓ + 317.5·b)` | Wheeler's 0.8 factor is already folded into the constants |
+| Flat spiral (pancake) | inner Ø, wire Ø d, pitch p | `L = r²N² / (203.2·r + 279.4·w)`, r = mean radius, w = N·p | Solved numerically |
+| Toroid, rectangular section | inner Ø, outer Ø, height h | `L = µ₀N²h·ln(rₒ/rᵢ) / 2π` | Exact for an ideal winding |
 
-### 2.1 Solving for N and pitch (the core maths)
+The PCB planar spiral (Mohan's modified Wheeler) moves to *Future*. It doesn't need a 3-D coil form.
 
-**Single-layer solenoid, user fixes length ℓ:**
-`N = √(L(9r + 10ℓ)) / r`, then `p = ℓ / N`. Check that `p ≥ d` (the wire fits).
+### 2.1 Solving for N and pitch
 
-**Single-layer solenoid, user fixes pitch p (or close-wound, p = d):** since ℓ = N·p, this becomes a quadratic in N:
-`r²N² − 10LpN − 9Lr = 0` → `N = [10Lp + √(100L²p² + 36Lr³)] / (2r²)`.
+| Shape / mode | Solution |
+|---|---|
+| Solenoid, length ℓ fixed | `N = √(L·(228.6r + 254ℓ)) / r`, then `p = ℓ/N`. Check `p ≥ d` |
+| Solenoid, pitch p fixed (close-wound means p = d) | ℓ = N·p gives the quadratic `r²N² − 254·L·p·N − 228.6·L·r = 0` → **`N = [254·L·p + √((254·L·p)² + 914.4·L·r³)] / (2r²)`** |
+| Flat spiral, multi-layer | r and w depend on N, so use bisection on `L(N) − L_target`. L(N) increases with N, so there is a single answer, and bisection needs only the standard `math` module |
+| Toroid | `N = √(2π·L / (µ₀·h·ln(rₒ/rᵢ)))` |
 
-**Flat spiral / multi-layer:** r and w depend on N, so use a 1-D root find on `f(N) = L_formula(N) − L_target` (Brent's method; f increases with N, so the root is unique).
-
-**Toroid:** `N = √(2πL / (µ₀h·ln(rₒ/rᵢ)))`.
-
-**Post-processing, every geometry:**
-- Round N to a buildable value (whole turns, or ¼/½ turns where the user allows it), recompute L, and show the **rounding error in %**.
-- Report the derived values: coil length, wire length (helix length plus leads), DC resistance (from AWG/diameter and copper resistivity), and, optionally, a self-resonant frequency estimate (Medhurst).
-- Show the formula's **validity warnings** (for example "ℓ/r < 0.8, Wheeler error may exceed 1%; Nagaoka/Lundin cross-check shown").
-
-**Optional accuracy upgrade:** a Lundin or Nagaoka-coefficient calculation, shown next to Wheeler as a cross-check for short solenoids.
+**Post-processing, every shape:** round N to a buildable value (whole turns by default; ½ and ¼ turns optional), recompute L, and show the rounding error in %. Also report coil length, wire length, and DC resistance (ρ_Cu = 1.72×10⁻⁸ Ω·m, from wire Ø). Show validity warnings, for example ℓ/r < 0.8.
 
 ---
 
-## 3. Architecture
+## 3. Minimising dependencies: run inside FreeCAD, no MCP needed
+
+The app doesn't need MCP to build the model. **The app can run *inside* FreeCAD as a macro**, which already bundles everything needed:
+
+| Need | Provided by (bundled with FreeCAD) |
+|---|---|
+| GUI: drop-down, input fields, buttons | **PySide (Qt)**: `QComboBox`, `QStackedWidget`, `QFormLayout` |
+| 3-D modelling | **FreeCAD `Part` module**: `makeHelix`, `makePipeShell`, booleans |
+| Maths | Python standard library: `math` |
+| Measurement log | Python standard library: `csv` / `json` |
+| Export | FreeCAD File → Export (done by the user) |
+
+**Runtime dependencies beyond FreeCAD: zero.** No pip installs, no server, no MCP plugin, no internet.
+
+### Comparing the options
+
+| Option | Extra dependencies | Verdict |
+|---|---|---|
+| **A. FreeCAD macro with a Qt dialog** | None | ✅ **Recommended (primary)** |
+| B. Separate app that writes an `.FCMacro` file for the user to run | None, but two steps for the user | Fallback / CLI mode |
+| C. Separate app driving FreeCAD through [neka-nat/freecad-mcp](https://github.com/neka-nat/freecad-mcp) | MCP addon + `mcp` SDK + server process | ❌ Not needed for the app |
+
+### Where the existing MCP plugin still helps (optional, no code changes)
+
+The CAD builder is plain FreeCAD Python. That means **Claude (or any MCP client) can drive it through freecad-mcp's `execute_code` tool** without anything extra in the app: for example *"design a 10 µH solenoid on a 20 mm form"* → Claude calls `execute_code` with `import inductor_cad; inductor_cad.build(...)`, then `get_view` to show a screenshot. The app never imports or requires MCP; this is just a free bonus for the setup you already have.
+
+### Architecture
 
 ```
-┌──────────────┐    ┌────────────────────┐    ┌──────────────────────┐
-│  UI          │──▶ │  Design core       │──▶ │  CAD generator       │
-│ (Streamlit / │    │  (pure Python lib) │    │  builds FreeCAD      │
-│  web form)   │    │  formulas, solver, │    │  Python script /     │
-│              │    │  units, validation │    │  ops for geometry    │
-└──────┬───────┘    └────────────────────┘    └─────────┬────────────┘
-       │                                                │ MCP client (python `mcp` SDK)
-       │                                                ▼
-       │                                     ┌──────────────────────┐
-       │                                     │ FreeCAD MCP server   │
-       │                                     │ (runs inside FreeCAD)│
-       │                                     └──────────────────────┘
-       ▼
-┌──────────────────────┐
-│ Measurement store    │  SQLite: design params, predicted L,
-│ + comparison/plots   │  measured L, test freq, instrument, notes
-└──────────────────────┘
+FreeCAD (only dependency)
+└── Macro: InductorDesigner.FCMacro
+      ├── inductor_core.py   pure Python + math only. Formulas, solvers, validation.
+      │                      Has no FreeCAD imports, so it is testable with plain `python3`.
+      ├── inductor_cad.py    FreeCAD Part code: build_solenoid_form(), build_spiral_form(), ...
+      ├── inductor_ui.py     PySide dialog (drop-down → per-shape input page → results)
+      └── inductor_log.py    measurement history (CSV in FreeCAD's user data dir)
 ```
 
-**Stack:** Python 3.11+ everywhere, since FreeCAD's own scripting is Python.
-- `inductor_core/`: formulas, solvers, units (`pint`), validation. No I/O. 100% unit-tested.
-- `inductor_cad/`: turns a `CoilDesign` into FreeCAD operations. Two back ends behind one interface:
-  - **MCP back end**: talks to a FreeCAD MCP server (for example an addon that exposes `execute_code` / object-creation tools).
-  - **Headless back end**: runs the same script with `freecadcmd`, for CI and for users without MCP.
-- `inductor_app/`: the UI (Streamlit to start; can move to FastAPI + a web front end later).
-- `inductor_data/`: SQLite persistence and comparison analytics.
+Distribution: copy the folder into FreeCAD's `Macro/` directory, or install it with the **Addon Manager** from this GitHub repo (add a `package.xml`).
 
 ---
 
 ## 4. Phased action plan
 
-### Phase 0: Project setup (≈1 day)
-- [ ] Repository layout (packages above), `pyproject.toml`, `ruff`, `mypy`, `pytest`.
-- [ ] GitHub Actions CI running lint, type checks and tests.
-- [ ] Pick and pin the FreeCAD version (1.0.x) and the FreeCAD MCP server, and record the install steps in the README.
-- **Done when:** CI is green on an empty test suite.
+### Phase 0: Project setup (½ day)
+- [ ] Repo layout as above; `package.xml` for Addon Manager.
+- [ ] Target **FreeCAD 1.0.x** (Python 3.11, PySide2/6 through FreeCAD's `PySide` shim).
+- [ ] Tests use the standard-library **`unittest`**, so there is no pytest dependency.
+- [ ] GitHub Actions: (1) core tests with plain Python, (2) CAD smoke tests with **`freecadcmd`** (headless FreeCAD, installed only in CI).
 
-### Phase 1: Calculation core (≈3–4 days)
-- [ ] A `Geometry` enum and input dataclasses for each geometry, with unit-aware fields.
-- [ ] Forward formulas `L(N, dims)` for every geometry in §2.
-- [ ] Inverse solvers `N(L_target, dims)`: closed form where possible, Brent's method otherwise.
-- [ ] Pitch/length resolution modes: fixed length, fixed pitch, close-wound (from wire gauge).
-- [ ] Rounding, recomputed L, error %, wire length, DCR, validity warnings.
-- [ ] Wire table (AWG/SWG to diameter including enamel).
-- **Tests:** published reference values, for example r = 1 in, ℓ = 2 in, N = 20 → `L = 400/29 = 13.79 µH`; forward/inverse round-trip property tests (Hypothesis); edge cases (wire too thick for the requested pitch, impossible targets).
-- **Done when:** every geometry round-trips to within 1e-9 relative error and matches reference examples to within 0.5%.
+### Phase 1: Calculation core, `inductor_core.py` (3 days)
+- [ ] `Shape` enum: `SOLENOID`, `MULTILAYER`, `FLAT_SPIRAL`, `TOROID`.
+- [ ] Input dataclasses per shape, all in mm / µH (SI internally for µ₀).
+- [ ] Forward `L(N, dims)` and inverse `N(L_target, dims)` for each shape (§2.1).
+- [ ] Pitch modes: fixed length / fixed pitch / close-wound.
+- [ ] Rounding + recomputed L + error %, wire length, DCR, warnings.
+- [ ] Table of common metric enamelled-wire sizes (Ø 0.10 … 2.00 mm) with insulated Ø, for close-wound pitch.
+- **Tests:** reference value 25.4 / 50.8 mm, N = 20 → 13.79 µH; forward/inverse round trips for every shape; errors for impossible inputs (wire wider than pitch, target too large for the form).
+- **Done when:** all shapes round-trip to better than 1e-9 relative error.
 
-### Phase 2: CLI and minimal UI (≈2 days)
-- [ ] `inductor design --geometry solenoid --diameter 25mm --wire 0.8mm --target 10uH`
-- [ ] Streamlit form: geometry selector → dynamic dimension fields → target L → results card (N, p, ℓ, wire length, DCR, warnings) plus a 2-D sketch.
-- **Done when:** a user can produce a design from the browser with no CAD installed.
+### Phase 2: Dialog UI, `inductor_ui.py` (2–3 days)
+- [ ] **Shape drop-down (`QComboBox`)** at the top. Changing it switches a `QStackedWidget` to that shape's input page, with an explanatory sketch image per shape.
+- [ ] Input fields as `QDoubleSpinBox` with **"mm" suffixes** and sensible ranges. Inductance field with an nH/µH/mH unit drop-down.
+- [ ] Pitch-mode radio buttons (fixed length / fixed pitch / close-wound) for solenoid and spiral.
+- [ ] **Calculate** → results panel: N (exact and rounded), pitch, coil length, wire length, DCR, predicted L at the rounded N, error %, warnings in amber.
+- [ ] **Build in FreeCAD** button (enabled after a calculation).
+- [ ] Opens as a docked Task Panel in FreeCAD, so the 3-D view stays visible.
 
-### Phase 3: FreeCAD geometry generation (≈4–5 days)
-- [ ] Parametric coil-form builders:
-  - **Solenoid form:** a tube (`Part.makeCylinder`, bore cut) with a **helical groove**: `Part.makeHelix(pitch, length, r)`, a circular profile of diameter ≈ d + clearance, swept with `Part.Wire.makePipeShell(..., isFrenet=True)` and then cut from the tube. Add end flanges and wire-exit holes.
-  - **Flat spiral:** a disc with an Archimedean spiral groove (a spiral wire from points/B-spline, profile swept).
-  - **Toroid:** a rectangular-section ring with N radial guide slots on the outer edge.
-  - **Planar PCB spiral:** export the trace polygon as DXF/KiCad footprint instead of a 3-D form.
-- [ ] Optional: a "wire" solid for visualisation, in a different colour.
-- [ ] Each object gets named, parametric properties (spreadsheet-driven) so the user can tweak them in FreeCAD.
-- [ ] Export STEP and STL.
-- [ ] Get this working first through the **headless `freecadcmd` back end**, so CI can check the output: the shape is valid, the volume is above 0, and the bounding box matches the design.
-- **Done when:** CI produces valid STEP/STL for each geometry from sample designs.
+### Phase 3: Coil-form modelling, `inductor_cad.py` (4–5 days)
+- [ ] **Solenoid form:** tube (bore + wall) → helical groove: `Part.makeHelix(pitch, length, r)` + circular profile (Ø d + clearance) → `makePipeShell(..., isFrenet=True)` → cut from tube. End flanges and Ø d+0.2 mm wire-exit holes.
+- [ ] **Multi-layer form:** bobbin (core tube + two flanges), with winding width ℓ and depth b. No groove.
+- [ ] **Flat spiral form:** disc with an Archimedean spiral groove (B-spline through points r = rᵢ + p·θ/2π), profile swept and cut.
+- [ ] **Toroid form:** rectangular-section ring with N guide notches on the outer edge.
+- [ ] Optional "wire" solid (copper colour) to show the winding.
+- [ ] Design parameters stored as **custom properties** on the object, and a summary written to the document, so a saved `.FCStd` carries its own design record.
+- [ ] Builder never exports anything. **The user exports with File → Export** (STEP/STL/...).
+- [ ] Shape validity checks after each build: `shape.isValid()`, volume > 0, bounding box matches the design. Show a friendly message if a sweep fails (usually pitch too tight).
+- **CI:** `freecadcmd` builds every shape from sample designs and runs the same checks.
 
-### Phase 4: MCP integration (≈3 days)
-- [ ] Install and configure the FreeCAD MCP server addon, and confirm its tool list (document creation, code execution, screenshot/view).
-- [ ] Write `McpCadBackend` with the Python `mcp` client SDK: connect, create a document, send the generated build script, fetch a screenshot back for the UI preview, and trigger the export.
-- [ ] Error handling: FreeCAD not running, script exceptions sent back to the UI, timeouts.
-- [ ] "Generate in FreeCAD" button in the UI, plus an "Open STEP" / download link.
-- [ ] Also allow the flow to be driven from an LLM client (Claude Desktop/Code) that has both the FreeCAD MCP and an **inductor-design MCP server** this app exposes (`design_inductor`, `build_coil_form`, `log_measurement` tools).
-- **Done when:** one click in the UI produces the coil form in a running FreeCAD session.
+### Phase 4: Measurement and comparison, `inductor_log.py` (2 days)
+- [ ] **Log measurement** form: measured L (nH/µH/mH), test frequency (kHz), instrument, notes.
+- [ ] Each entry links to its design: shape, dims, N, pitch, predicted L.
+- [ ] Comparison: predicted vs measured, error %, and a ±tolerance band (default ±5%) shown green or red.
+- [ ] History table, filterable by shape; mean/σ of the error per shape.
+- [ ] Optional chart of predicted vs measured: matplotlib is used **only if it is already present** (most FreeCAD builds include it). Otherwise the table is shown alone.
+- [ ] **Calibration:** per-shape correction factor (mean measured/predicted) offered as an opt-in "corrected" target.
+- [ ] Measurement tips: measure well below self-resonance, null the test leads, keep metal away.
+- Storage: CSV in `FreeCAD.getUserAppDataDir()/InductorDesigner/measurements.csv`, readable in any spreadsheet.
 
-### Phase 5: Measurement and comparison (≈2–3 days)
-- [ ] Measurement form: measured L, test frequency, instrument (LCR meter / VNA / nanoVNA), lead-length compensation (yes/no), notes, photo.
-- [ ] Store each design and measurement pair in SQLite.
-- [ ] Comparison view: predicted vs measured, error %, a pass/fail band (for example ±5%), and the Wheeler/Lundin cross-check.
-- [ ] History dashboard: error by geometry and by ℓ/r ratio (shows where Wheeler drifts), scatter of predicted vs measured.
-- [ ] **Calibration:** fit a per-geometry correction factor from the logged data and offer "corrected design" mode.
-- [ ] Measurement tips in the UI: measure well below the SRF, keep metal away, null the test leads.
-- **Done when:** a logged measurement shows up in the comparison and history views.
+### Phase 5: Polish and release (2 days)
+- [ ] Input validation, tooltips, remember last-used values (`FreeCAD.ParamGet`).
+- [ ] Save/load a design as JSON.
+- [ ] README: install (Macro folder / Addon Manager), usage with screenshots, formula references.
+- [ ] Optional section: *"Using with freecad-mcp"*, with example prompts for driving `inductor_cad` through `execute_code`.
+- [ ] Tag **v1.0**.
 
-### Phase 6: Hardening and release (≈2 days)
-- [ ] Input validation and clear error messages; unit selector (mm/in, nH/µH/mH).
-- [ ] Save/load designs as JSON; export a design report as PDF/Markdown.
-- [ ] Docs: user guide, formula references, FreeCAD and MCP setup guide.
-- [ ] Packaging: `pip install`, plus Docker for the UI (FreeCAD stays on the host).
-- **Done when:** v1.0 is tagged.
-
-### Phase 7: Future
-- Ferrite/powder toroids (A_L value / µᵣ), with core-material libraries.
-- Q factor and AC resistance (skin/proximity effect), and SRF from self-capacitance models.
-- Optimisation: given L, a max size and a wire, minimise DCR or maximise Q.
-- Coupled coils / mutual inductance (wireless power, transformers).
-- FEM check via FreeCAD FEM / Elmer, or FEMM.
+### Phase 6: Future
+- Ferrite/powder cores (A_L / µᵣ), Q factor and AC resistance, self-resonance estimate.
+- PCB planar spiral (Mohan modified Wheeler) → sketch/DXF output.
+- Lundin / Nagaoka cross-check for short solenoids.
+- Optimisation: minimise DCR for a given L and maximum size.
 
 ---
 
@@ -152,53 +158,43 @@ All Wheeler formulas below take dimensions in **inches** and return **µH**. Int
 ```python
 @dataclass
 class CoilDesign:
-    id: UUID
-    geometry: Geometry            # SOLENOID, MULTILAYER, SPIRAL, TOROID, PLANAR
-    dims: dict[str, Quantity]     # geometry-specific inputs
-    wire_diameter: Quantity
-    target_L: Quantity
+    shape: Shape                  # SOLENOID | MULTILAYER | FLAT_SPIRAL | TOROID
+    dims_mm: dict[str, float]     # shape-specific, always mm
+    wire_d_mm: float
+    target_uH: float
     turns: float                  # rounded, buildable
-    pitch: Quantity
-    predicted_L: Quantity         # at the rounded N
-    formula: str                  # "wheeler_single_layer", ...
+    pitch_mm: float
+    predicted_uH: float           # at the rounded N
     warnings: list[str]
-    cad_files: list[Path]
 
 @dataclass
 class Measurement:
-    design_id: UUID
-    measured_L: Quantity
-    frequency: Quantity
+    design: CoilDesign
+    measured_uH: float
+    freq_kHz: float
     instrument: str
     notes: str
-    timestamp: datetime
+    timestamp: str                # ISO 8601
 ```
 
 ---
 
-## 6. Risks and open questions
+## 6. Risks
 
-| Risk / question | Mitigation |
+| Risk | Mitigation |
 |---|---|
-| Which FreeCAD MCP server to standardise on (tool names differ between projects) | Hide it behind the `CadBackend` interface; keep the headless back end as a guaranteed fallback |
-| Helical sweeps in FreeCAD can fail for tight pitch/profile ratios | Enforce pitch ≥ groove width + margin; use Frenet mode; validate the shape after every build |
-| Wheeler error for short or very long coils | Show validity warnings and the Lundin/Nagaoka cross-check; use the measured-data calibration |
-| Measurement error (leads, frequency near SRF) | Record test conditions; guidance in the UI; lead-compensation field |
-| UI choice (desktop vs web) | Start with Streamlit; the core and CAD packages stay UI-independent |
-
-**Decisions needed from the owner:**
-1. Which geometries matter most for v1? (Suggestion: single-layer solenoid → flat spiral → toroid.)
-2. Target manufacturing: 3D-printed forms (STL) or machined (STEP)?
-3. Should the app be usable by an AI agent over MCP (expose our own MCP server), or only by people?
-4. Preferred units and wire standard (AWG vs metric).
+| Helical/spiral sweeps fail at tight pitch/profile ratios | Enforce pitch ≥ groove Ø + 0.1 mm; Frenet mode; validate the shape; clear error message |
+| PySide2 vs PySide6 differences between FreeCAD versions | Import only through FreeCAD's `PySide` compatibility module |
+| Wheeler error for short or very long coils | Validity warnings; measured-data calibration (Phase 4) |
+| Measurement setup errors | Record frequency and instrument; tips shown in the UI |
 
 ---
 
-## 7. Suggested milestone timeline
+## 7. Timeline
 
 | Week | Milestone |
 |---|---|
-| 1 | Phase 0 + Phase 1 (core maths fully tested) |
-| 2 | Phase 2 (UI) + start of Phase 3 (solenoid form in headless FreeCAD) |
-| 3 | Phase 3 complete (all geometries) + Phase 4 (MCP) |
-| 4 | Phase 5 (measurement and comparison) + Phase 6 (release v1.0) |
+| 1 | Phase 0 + Phase 1 (core maths, fully tested) |
+| 2 | Phase 2 (dialog with shape drop-down) + solenoid form |
+| 3 | Rest of Phase 3 (all shapes) + Phase 4 (measurement log) |
+| 4 | Phase 5 → v1.0 |
